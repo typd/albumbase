@@ -6,6 +6,15 @@ from os.path import expanduser
 import json
 import hashlib
 
+def blue(text):
+    return "\033[94m" + text + "\033[0m"
+
+def green(text):
+    return "\033[92m" + text + "\033[0m"
+
+def red(text):
+    return "\033[91m" + text + "\033[0m"
+
 def md5(path):
     hash_md5 = hashlib.md5()
     with open(path, "rb") as f:
@@ -26,19 +35,20 @@ def readable_size(size):
 class AlbumFile:
     def __init__(self, path):
         self.path = path
-        self.id = md5(path)
+        self.name = os.path.basename(self.path)
+        self.feature_id = md5(path)
+        self.id = self.name + md5(path)
         self.size = os.path.getsize(path)
-        self.file_count = 1
-        self.fname = os.path.basename(self.path)
+        self.total_file_count = 1
 
-    def short_id(self):
-        return "{}...{}".format(self.id[:5], self.id[-5:])
+    def short_feature_id(self):
+        return "{}...{}".format(self.feature_id[:5], self.feature_id[-5:])
 
     def to_s(self):
-        return "[{}, {}, '{}']".format(self.short_id(), readable_size(self.size).rjust(8), self.path)
+        return "[{}, {}, '{}']".format(self.short_feature_id(), readable_size(self.size).rjust(8), self.path)
     
     def to_simple_s(self):
-        return "[{}, {}, '{}']".format(self.short_id(), readable_size(self.size).rjust(8), self.fname)
+        return "[{}, {}, '{}']".format(self.short_feature_id(), readable_size(self.size).rjust(8), self.name)
 
     def print_all(self, indent=0):
         head = "".ljust(indent, " ")
@@ -48,9 +58,13 @@ class AlbumDir:
     def __init__(self, dir):
         self.dirs = []
         self.files = []
+        self.file_id_set = set()
+        self.dir_id_set = set()
         self.path = dir
+        self.name = os.path.basename(dir)
+        self.id = self.name
         self.size = 0
-        self.file_count = 0
+        self.total_file_count = 0
 
         if not os.path.isdir(dir):
             # only accept dir
@@ -61,19 +75,21 @@ class AlbumDir:
             if is_dir:
                 a_dir = AlbumDir(path)
                 self.dirs.append(a_dir)
+                self.dir_id_set.add(a_dir.name)
                 self.size += a_dir.size
-                self.file_count += a_dir.file_count
+                self.total_file_count += a_dir.total_file_count
             else:
                 a_file = AlbumFile(path)
                 # ignore hidden files, including ".DS_Store"
-                if a_file.fname.startswith("."):
+                if a_file.name.startswith("."):
                     continue
-                self.dirs.append(a_file)
+                self.files.append(a_file)
+                self.file_id_set.add(a_file.id)
                 self.size += a_file.size
-                self.file_count += a_file.file_count
+                self.total_file_count += a_file.total_file_count
 
     def to_s(self):
-        return "[{} files, {}, '{}']".format(self.file_count, readable_size(self.size).rjust(8), self.path)
+        return "[{} dirs, {} total files, {}, '{}']".format(len(self.dirs), self.total_file_count, readable_size(self.size).rjust(8), self.path)
 
     def print_all(self, indent=0):
         head = "".ljust(indent, " ")
@@ -83,9 +99,68 @@ class AlbumDir:
         for d in self.dirs:
             d.print_all(indent + 4)
 
+class DirDiffResult:
+    def __init__(self, dir1, dir2):
+        self.dir1 = dir1
+        self.dir2 = dir2
+        self.dir1_only_files = [] 
+        self.dir2_only_files = [] 
+        self.matched_dirs = [] 
+        self.dir1_only_dirs = [] 
+        self.dir2_only_dirs = [] 
+        self.matched_files = [] 
+        for f in dir1.files:
+            if f.id in dir2.file_id_set:
+                self.matched_files.append(f)
+            else:
+                self.dir1_only_files.append(f)
+        for f in dir2.files:
+            if f.id in dir1.file_id_set:
+                pass # already added
+            else:
+                self.dir2_only_files.append(f)
+        for f in dir1.dirs:
+            if f.id in dir2.dir_id_set:
+                self.matched_dirs.append(f)
+            else:
+                self.dir1_only_dirs.append(f)
+        for f in dir2.dirs:
+            if f.id in dir2.dir_id_set:
+                pass # already added
+            else:
+                self.dir2_only_dirs.append(f)
+
+    def print_all(self):
+        print(blue("Diff"))
+        print("  " + self.dir1.to_s())
+        print("  " + self.dir2.to_s())
+        print(green("Matched: {}".format(len(self.matched_files))))
+        for f in self.matched_files:
+            print(green(f.to_s()))
+        for f in self.matched_dirs:
+            print("    " + green(f.to_s()))
+        print(red("'{}' Only: {}".format(self.dir1.name, len(self.dir1_only_files))))
+        for f in self.dir1_only_files:
+            print("    " + red(f.to_s()))
+        for f in self.dir1_only_dirs:
+            print("    " + red(f.to_s()))
+        print(red("'{}' Only: {}".format(self.dir2.name, len(self.dir2_only_files))))
+        for f in self.dir2_only_files:
+            print("    " + red(f.to_s()))
+        for f in self.dir2_only_dirs:
+            print("    " + red(f.to_s()))
+        print("")
+    
+
 def main():
-    h = AlbumDir("/Users/y/Downloads/")
-    h.print_all()
+    # local = "/Users/y/working/typd/test_folder/local"
+    # mount = "/Users/y/working/typd/test_folder/mount"
+    local = "./test_cases/case1/from"
+    target = "./test_cases/case1/target"
+    h1 = AlbumDir(local)
+    h2 = AlbumDir(target)
+    diff = DirDiffResult(h1, h2)
+    diff.print_all()
 
 if __name__ == "__main__":
     main()
