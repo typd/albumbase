@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+
+import sys
+import os
+from os.path import expanduser
+import json
+import hashlib
+
+def md5(path):
+    hash_md5 = hashlib.md5()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            hash_md5.update(chunk)
+    return hash_md5.hexdigest()
+
+def readable_size(size):
+    if size <= 1024:
+        return "{}b".format(size)
+    elif size <= 1024 * 1024:
+        return "{0:.1f}Kb".format(size / 1024)
+    elif size <= 1024 * 1024 * 1024:
+        return "{0:.1f}Mb".format(size / (1024 * 1024))
+    else:
+        return "{0:.1f}Gb".format(size / (1024 * 1024 * 1024))
+
+class AlbumFile:
+    def __init__(self, path):
+        self.path = path
+        self.id = md5(path)
+        self.size = os.path.getsize(path)
+        self.file_count = 1
+        self.fname = os.path.basename(self.path)
+
+    def short_id(self):
+        return "{}...{}".format(self.id[:5], self.id[-5:])
+
+    def to_s(self):
+        return "[{}, {}, '{}']".format(self.short_id(), readable_size(self.size).rjust(8), self.path)
+    
+    def to_simple_s(self):
+        return "[{}, {}, '{}']".format(self.short_id(), readable_size(self.size).rjust(8), self.fname)
+
+    def print_all(self, indent=0):
+        head = "".ljust(indent, " ")
+        print(head + self.to_simple_s())
+
+class AlbumDir:
+    def __init__(self, dir):
+        self.dirs = []
+        self.files = []
+        self.path = dir
+        self.size = 0
+        self.file_count = 0
+
+        if not os.path.isdir(dir):
+            # only accept dir
+            return
+        for file in os.listdir(dir):
+            path = os.path.join(dir, file)
+            is_dir = os.path.isdir(path)
+            if is_dir:
+                a_dir = AlbumDir(path)
+                self.dirs.append(a_dir)
+                self.size += a_dir.size
+                self.file_count += a_dir.file_count
+            else:
+                a_file = AlbumFile(path)
+                # ignore hidden files, including ".DS_Store"
+                if a_file.fname.startswith("."):
+                    continue
+                self.dirs.append(a_file)
+                self.size += a_file.size
+                self.file_count += a_file.file_count
+
+    def to_s(self):
+        return "[{} files, {}, '{}']".format(self.file_count, readable_size(self.size).rjust(8), self.path)
+
+    def print_all(self, indent=0):
+        head = "".ljust(indent, " ")
+        print(head + self.to_s())
+        for f in self.files:
+            f.print_all(indent + 4)
+        for d in self.dirs:
+            d.print_all(indent + 4)
+
+def main():
+    h = AlbumDir("/Users/y/Downloads/")
+    h.print_all()
+
+if __name__ == "__main__":
+    main()
