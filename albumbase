@@ -69,7 +69,7 @@ class AlbumDir:
         if not os.path.isdir(dir):
             # only accept dir
             return
-        for file in os.listdir(dir):
+        for file in sorted(os.listdir(dir)):
             path = os.path.join(dir, file)
             is_dir = os.path.isdir(path)
             if is_dir:
@@ -90,6 +90,11 @@ class AlbumDir:
 
     def to_s(self):
         return "[{} dirs, {} total files, {}, '{}']".format(len(self.dirs), self.total_file_count, readable_size(self.size).rjust(8), self.path)
+
+    def to_simple_s(self):
+        return "[{} dirs, {} total files, {}, '{}']".format(len(self.dirs),
+                self.total_file_count, readable_size(self.size).rjust(8),
+                self.name)
 
     def print_all(self, indent=0):
         head = "".ljust(indent, " ")
@@ -125,7 +130,7 @@ class DirDiffResult:
             else:
                 self.dir1_only_dirs.append(f)
         for f in dir2.dirs:
-            if f.id in dir2.dir_id_set:
+            if f.id in dir1.dir_id_set:
                 pass # already added
             else:
                 self.dir2_only_dirs.append(f)
@@ -135,20 +140,20 @@ class DirDiffResult:
         print("  " + self.dir1.to_s())
         print("  " + self.dir2.to_s())
         print(green("Matched: {}".format(len(self.matched_files))))
-        for f in self.matched_files:
-            print(green(f.to_s()))
         for f in self.matched_dirs:
-            print("    " + green(f.to_s()))
+            print("    " + green(f.to_simple_s()))
+        for f in self.matched_files:
+            print(green(f.to_simple_s()))
         print(red("'{}' Only: {}".format(self.dir1.name, len(self.dir1_only_files))))
-        for f in self.dir1_only_files:
-            print("    " + red(f.to_s()))
         for f in self.dir1_only_dirs:
-            print("    " + red(f.to_s()))
+            print("    " + red(f.to_simple_s()))
+        for f in self.dir1_only_files:
+            print("    " + red(f.to_simple_s()))
         print(red("'{}' Only: {}".format(self.dir2.name, len(self.dir2_only_files))))
-        for f in self.dir2_only_files:
-            print("    " + red(f.to_s()))
         for f in self.dir2_only_dirs:
-            print("    " + red(f.to_s()))
+            print("    " + red(f.to_simple_s()))
+        for f in self.dir2_only_files:
+            print("    " + red(f.to_simple_s()))
         print("")
     
 
