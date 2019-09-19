@@ -9,6 +9,9 @@ import hashlib
 def blue(text):
     return "\033[94m" + text + "\033[0m"
 
+def yellow(text):
+    return "\033[93m" + text + "\033[0m"
+
 def green(text):
     return "\033[92m" + text + "\033[0m"
 
@@ -24,13 +27,13 @@ def md5(path):
 
 def readable_size(size):
     if size <= 1024:
-        return "{}b".format(size)
+        return "{} bs".format(size)
     elif size <= 1024 * 1024:
-        return "{0:.1f}Kb".format(size / 1024)
+        return "{0:.1f} Kb".format(size / 1024)
     elif size <= 1024 * 1024 * 1024:
-        return "{0:.1f}Mb".format(size / (1024 * 1024))
+        return "{0:.1f} Mb".format(size / (1024 * 1024))
     else:
-        return "{0:.1f}Gb".format(size / (1024 * 1024 * 1024))
+        return "{0:.1f} Gb".format(size / (1024 * 1024 * 1024))
 
 class AlbumFile:
     def __init__(self, path):
@@ -45,10 +48,16 @@ class AlbumFile:
         return "{}...{}".format(self.feature_id[:5], self.feature_id[-5:])
 
     def to_s(self):
-        return "[{}, {}, '{}']".format(self.short_feature_id(), readable_size(self.size).rjust(8), self.path)
+        return "|'{}' ({}, {})|".format(
+                self.path,
+                readable_size(self.size).rjust(0),
+                self.short_feature_id())
     
     def to_simple_s(self):
-        return "[{}, {}, '{}']".format(self.short_feature_id(), readable_size(self.size).rjust(8), self.name)
+        return "|'{}' ({}, {})|".format(
+                self.name,
+                readable_size(self.size).rjust(0),
+                self.short_feature_id())
 
     def print_all(self, indent=0):
         head = "".ljust(indent, " ")
@@ -59,7 +68,7 @@ class AlbumDir:
         self.dirs = []
         self.files = []
         self.file_id_set = set()
-        self.dir_id_set = set()
+        self.dir_dict = {}
         self.path = dir
         self.name = os.path.basename(dir)
         self.id = self.name
@@ -75,7 +84,7 @@ class AlbumDir:
             if is_dir:
                 a_dir = AlbumDir(path)
                 self.dirs.append(a_dir)
-                self.dir_id_set.add(a_dir.name)
+                self.dir_dict[a_dir.id] = a_dir
                 self.size += a_dir.size
                 self.total_file_count += a_dir.total_file_count
             else:
@@ -89,12 +98,18 @@ class AlbumDir:
                 self.total_file_count += a_file.total_file_count
 
     def to_s(self):
-        return "[{} dirs, {} total files, {}, '{}']".format(len(self.dirs), self.total_file_count, readable_size(self.size).rjust(8), self.path)
+        return "['{}' ({}, {} d, {} f)]".format(
+                    self.path,
+                    readable_size(self.size).rjust(0),
+                    len(self.dirs),
+                    self.total_file_count)
 
     def to_simple_s(self):
-        return "[{} dirs, {} total files, {}, '{}']".format(len(self.dirs),
-                self.total_file_count, readable_size(self.size).rjust(8),
-                self.name)
+        return "['{}' ({}, {} d, {} f)]".format(
+                    self.name,
+                    readable_size(self.size).rjust(0),
+                    len(self.dirs),
+                    self.total_file_count)
 
     def print_all(self, indent=0):
         head = "".ljust(indent, " ")
@@ -110,10 +125,13 @@ class DirDiffResult:
         self.dir2 = dir2
         self.dir1_only_files = [] 
         self.dir2_only_files = [] 
-        self.matched_dirs = [] 
+        self.exact_matched_dirs = [] 
+        self.partial_matched_dirs = []
+        self.dir_match_results = []
         self.dir1_only_dirs = [] 
         self.dir2_only_dirs = [] 
         self.matched_files = [] 
+        # try to match files
         for f in dir1.files:
             if f.id in dir2.file_id_set:
                 self.matched_files.append(f)
@@ -124,32 +142,57 @@ class DirDiffResult:
                 pass # already added
             else:
                 self.dir2_only_files.append(f)
-        for f in dir1.dirs:
-            if f.id in dir2.dir_id_set:
-                self.matched_dirs.append(f)
+        # try to match dirs
+        for d in dir1.dirs:
+            if d.id in dir2.dir_dict.keys():
+                d2 = dir2.dir_dict[d.id]
+                diff = DirDiffResult(d, d2)
+                if diff.exact_match():
+                    self.exact_matched_dirs.append(d)
+                else:
+                    self.partial_matched_dirs.append(d)
             else:
-                self.dir1_only_dirs.append(f)
-        for f in dir2.dirs:
-            if f.id in dir1.dir_id_set:
+                self.dir1_only_dirs.append(d)
+        for d in dir2.dirs:
+            if d.id in dir1.dir_dict.keys():
                 pass # already added
             else:
-                self.dir2_only_dirs.append(f)
+                self.dir2_only_dirs.append(d)
+
+    def exact_match(self):
+        return\
+            (len(self.partial_matched_dirs) == 0) and\
+            (len(self.dir1_only_dirs) == 0) and\
+            (len(self.dir1_only_files) == 0) and\
+            (len(self.dir2_only_dirs) == 0) and\
+            (len(self.dir2_only_files) == 0)
 
     def print_all(self):
         print(blue("Diff"))
-        print("  " + self.dir1.to_s())
-        print("  " + self.dir2.to_s())
-        print(green("Matched: {}".format(len(self.matched_files))))
-        for f in self.matched_dirs:
+        print(blue("    " + self.dir1.to_s()))
+        print(blue("    " + self.dir2.to_s()))
+        print(green("{}d and {}f matched".format(
+            len(self.exact_matched_dirs),
+            len(self.matched_files))))
+        for f in self.exact_matched_dirs:
             print("    " + green(f.to_simple_s()))
         for f in self.matched_files:
             print(green(f.to_simple_s()))
-        print(red("'{}' Only: {}".format(self.dir1.name, len(self.dir1_only_files))))
+        print(yellow("{}d partial matched".format(len(self.partial_matched_dirs))))
+        for f in self.partial_matched_dirs:
+            print("    " + yellow(f.to_simple_s()))
+        print(red("{}d and {}f only in ['{}']".format(
+            len(self.dir1_only_dirs),
+            len(self.dir1_only_files),
+            self.dir1.name)))
         for f in self.dir1_only_dirs:
             print("    " + red(f.to_simple_s()))
         for f in self.dir1_only_files:
             print("    " + red(f.to_simple_s()))
-        print(red("'{}' Only: {}".format(self.dir2.name, len(self.dir2_only_files))))
+        print(red("{}d and {}f only in ['{}']".format(
+            len(self.dir2_only_dirs),
+            len(self.dir2_only_files),
+            self.dir2.name)))
         for f in self.dir2_only_dirs:
             print("    " + red(f.to_simple_s()))
         for f in self.dir2_only_files:
