@@ -40,8 +40,8 @@ class AlbumFile:
         self.path = path
         self.name = os.path.basename(self.path)
         self.feature_id = md5(path)
-        self.id = self.name + md5(path)
         self.size = os.path.getsize(path)
+        self.id = self.name + str(self.size) + md5(path)
         self.total_file_count = 1
 
     def short_feature_id(self):
@@ -126,8 +126,7 @@ class DirDiffResult:
         self.dir1_only_files = [] 
         self.dir2_only_files = [] 
         self.exact_matched_dirs = [] 
-        self.partial_matched_dirs = []
-        self.dir_match_results = []
+        self.partial_match_results = []
         self.dir1_only_dirs = [] 
         self.dir2_only_dirs = [] 
         self.matched_files = [] 
@@ -150,7 +149,7 @@ class DirDiffResult:
                 if diff.exact_match():
                     self.exact_matched_dirs.append(d)
                 else:
-                    self.partial_matched_dirs.append(d)
+                    self.partial_match_results.append(diff)
             else:
                 self.dir1_only_dirs.append(d)
         for d in dir2.dirs:
@@ -161,50 +160,60 @@ class DirDiffResult:
 
     def exact_match(self):
         return\
-            (len(self.partial_matched_dirs) == 0) and\
+            (len(self.partial_match_results) == 0) and\
             (len(self.dir1_only_dirs) == 0) and\
             (len(self.dir1_only_files) == 0) and\
             (len(self.dir2_only_dirs) == 0) and\
-            (len(self.dir2_only_files) == 0)
+            (len(self.dir2_only_files) == 0) and\
+            (self.dir1.size == self.dir2.size)
 
     def print_all(self):
+        local_indent = "    "
+        splitter_width = 60
+
         print(blue("Diff"))
-        print(blue("    " + self.dir1.to_s()))
-        print(blue("    " + self.dir2.to_s()))
+        print(blue(local_indent + self.dir1.to_s()))
+        print(blue(local_indent + self.dir2.to_s()))
+
         print(green("{}d and {}f matched".format(
             len(self.exact_matched_dirs),
             len(self.matched_files))))
         for f in self.exact_matched_dirs:
-            print("    " + green(f.to_simple_s()))
+            print(green(local_indent + f.to_simple_s()))
         for f in self.matched_files:
             print(green(f.to_simple_s()))
-        print(yellow("{}d partial matched".format(len(self.partial_matched_dirs))))
-        for f in self.partial_matched_dirs:
-            print("    " + yellow(f.to_simple_s()))
+
+        print(yellow("{}d partial matched".format(len(self.partial_match_results))))
+        for r in self.partial_match_results:
+            print(yellow(local_indent +
+                r.dir1.to_simple_s().ljust(splitter_width, " ") + r.dir2.to_simple_s()))
+
         print(red("{}d and {}f only in ['{}']".format(
             len(self.dir1_only_dirs),
             len(self.dir1_only_files),
             self.dir1.name)))
         for f in self.dir1_only_dirs:
-            print("    " + red(f.to_simple_s()))
+            print(red(local_indent + f.to_simple_s()))
         for f in self.dir1_only_files:
-            print("    " + red(f.to_simple_s()))
+            print(red(local_indent + f.to_simple_s()))
+
         print(red("{}d and {}f only in ['{}']".format(
             len(self.dir2_only_dirs),
             len(self.dir2_only_files),
             self.dir2.name)))
+        p1 = "".ljust(splitter_width, " ")
         for f in self.dir2_only_dirs:
-            print("    " + red(f.to_simple_s()))
+            print(red(local_indent + p1 + f.to_simple_s()))
         for f in self.dir2_only_files:
-            print("    " + red(f.to_simple_s()))
+            print(red(local_indent + p1 + f.to_simple_s()))
         print("")
     
 
 def main():
-    # local = "/Users/y/working/typd/test_folder/local"
-    # mount = "/Users/y/working/typd/test_folder/mount"
     local = "./test_cases/case1/from"
     target = "./test_cases/case1/target"
+    local = "/Users/y/working/typd/test_folder/local"
+    target = "/Users/y/working/typd/test_folder/mount"
     h1 = AlbumDir(local)
     h2 = AlbumDir(target)
     diff = DirDiffResult(h1, h2)
